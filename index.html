@@ -617,7 +617,17 @@ async function uploadPhoto(file, filenamePrefix){
       body: JSON.stringify({action:'uploadImage', filename, dataUrl})
     });
     const data = await res.json();
-    if(data && data.success && data.url) return data.url;
+    if(data && data.success && data.url){
+  const url = String(data.url);
+  const match = url.match(/[?&]id=([^&]+)/) || url.match(/\/d\/([^/]+)/);
+
+  if(match && match[1]){
+    const fileId = decodeURIComponent(match[1]);
+    return `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1600`;
+  }
+
+  return url;
+}
     console.error('[uploadPhoto] upload failed:', data);
     showToast('อัปโหลดรูปภาพไม่สำเร็จ','error');
     return null;
