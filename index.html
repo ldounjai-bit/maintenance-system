@@ -804,12 +804,24 @@ async function submitNewTicket(e){
   if(!room || !problem) return;
 
   let brokenPhotoUrl = null;
-  const photoFile = form.photoBroken && form.photoBroken.files && form.photoBroken.files[0];
-  if(photoFile){
-    showToast('กำลังอัปโหลดรูปภาพ...','info');
-    brokenPhotoUrl = await uploadPhoto(photoFile, 'broken');
-  }
+  const photoFiles = Array.from(
+  form.photoBroken && form.photoBroken.files
+    ? form.photoBroken.files
+    : []
+).slice(0, 5);
 
+const brokenPhotoUrls = [];
+
+if (photoFiles.length) {
+  showToast('กำลังอัปโหลดรูปภาพ...','info');
+
+  for (const photoFile of photoFiles) {
+    const uploadedUrl = await uploadPhoto(photoFile, 'broken');
+    if (uploadedUrl) brokenPhotoUrls.push(uploadedUrl);
+  }
+}
+
+brokenPhotoUrl = brokenPhotoUrls[0] || null;
   const list = await loadTickets();
   const t = {
     id: genTicketId(list),
@@ -824,7 +836,9 @@ async function submitNewTicket(e){
     equipment:{ type:'', brand:'', assetNo:'', symptom:'' },
     parts:[],
     brokenPhotoUrl: brokenPhotoUrl,
+    brokenPhotoUrls: brokenPhotoUrls,
     fixedPhotoUrl: null,
+    fixedPhotoUrls: [],
     completedAt:null,
     rating:null, ratingComment:'',
     history:[{status:'pending', at:new Date().toISOString(), by:state.session.name}]
@@ -876,6 +890,7 @@ function openModal(id){
     assetNo: t.equipment.assetNo || '',
     symptom: t.equipment.symptom || '',
     fixedPhotoUrl: (t && t.fixedPhotoUrl) || null,
+fixedPhotoUrls: (t && t.fixedPhotoUrls) || [],
   } : { diagnosis:'', type:'', brand:'', assetNo:'', symptom:'', fixedPhotoUrl:null };
   render();
 }
@@ -908,19 +923,32 @@ async function saveTechDetails(id){
     equipment:{type:state.equipmentDraft.type, brand:state.equipmentDraft.brand, assetNo:state.equipmentDraft.assetNo, symptom:state.equipmentDraft.symptom},
     parts: JSON.parse(JSON.stringify(state.partsDraft)),
     fixedPhotoUrl: state.equipmentDraft.fixedPhotoUrl,
+    fixedPhotoUrls: state.equipmentDraft.fixedPhotoUrls || [],
   }, {by:state.session.name, note:'บันทึกรายละเอียดอุปกรณ์/ค่าใช้จ่าย'});
   showToast('บันทึกรายละเอียดเรียบร้อย','info');
 }
 
 async function handleFixedPhotoSelect(event){
-  const file = event.target.files && event.target.files[0];
-  if(!file) return;
+  const files = Array.from(event.target.files || []).slice(0, 5);
+  if (!files.length) return;
+
   showToast('กำลังอัปโหลดรูปภาพ...','info');
-  const url = await uploadPhoto(file, 'fixed');
-  if(url){
-    state.equipmentDraft.fixedPhotoUrl = url;
-    showToast('แนบรูปหลังซ่อมเรียบร้อยแล้ว','done');
+
+  const fixedPhotoUrls = [];
+
+  for (const file of files) {
+    const url = await uploadPhoto(file, 'fixed');
+    if (url) fixedPhotoUrls.push(url);
   }
+
+  state.equipmentDraft.fixedPhotoUrls = fixedPhotoUrls;
+  state.equipmentDraft.fixedPhotoUrl = fixedPhotoUrls[0] || '';
+
+  showToast(
+    'แนบรูปหลังซ่อมเรียบร้อย ' + fixedPhotoUrls.length + ' รูป',
+    'done'
+  );
+
   render();
 }
 
@@ -953,6 +981,7 @@ async function completeTicket(id){
     };
     patch.parts = JSON.parse(JSON.stringify(state.partsDraft));
     patch.fixedPhotoUrl = state.equipmentDraft.fixedPhotoUrl;
+    patch.fixedPhotoUrls = state.equipmentDraft.fixedPhotoUrls || [];
   }
   await updateTicket(id, patch, {by:state.session.name, note:'แจ้งซ่อมเสร็จเรียบร้อย'});
   showToast('ปิดงานซ่อมเรียบร้อยแล้ว','done');
@@ -1138,7 +1167,7 @@ function viewReporter(){
           </div>
           <div class="field" style="margin-bottom:0;">
             <label for="f-photo-broken">📷 รูปอุปกรณ์ที่เสีย (แนบได้ ไม่บังคับ)</label>
-            <input id="f-photo-broken" name="photoBroken" type="file" accept="image/*" capture="environment">
+            <input id="f-photo-broken" name="photoBroken" type="file" accept="image/*" capture="environment" multiple>
           </div>
         </div>
         <button type="submit" class="btn btn-primary">ส่งเรื่องแจ้งซ่อม</button>
@@ -1375,12 +1404,30 @@ function ticketModal(){
         </div>
         <div class="subhead">🗒️ รายละเอียดปัญหา</div>
         <p style="font-size:14px; line-height:1.6; margin:0 0 4px;">${escapeHtml(t.problem)}</p>
-        ${t.brokenPhotoUrl ? `
-        <a href="${t.brokenPhotoUrl}" target="_blank" rel="noopener">
-          <img src="${t.brokenPhotoUrl}" alt="รูปอุปกรณ์ที่เสีย" style="max-width:220px; width:100%; border-radius:10px; border:1px solid var(--line); margin-top:8px; display:block;">
-        </a>
-        <div class="hint" style="margin-top:4px;">📷 รูปอุปกรณ์ที่เสีย (กดเพื่อดูขนาดเต็ม)</div>
-        ` : ''}
+        ${(
+  (t.brokenPhotoUrls && t.brokenPhotoUrls.length)
+    ? t.brokenPhotoUrls
+    : (t.brokenPhotoUrl ? [t.brokenPhotoUrl] : [])
+).length ? `
+  <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+    ${(
+      (t.brokenPhotoUrls && t.brokenPhotoUrls.length)
+        ? t.brokenPhotoUrls
+        : [t.brokenPhotoUrl]
+    ).map((url, index) => `
+      <a href="${url}" target="_blank" rel="noopener">
+        <img
+          src="${url}"
+          alt="รูปอุปกรณ์ที่เสีย ${index + 1}"
+          style="width:110px; height:110px; object-fit:cover; border-radius:8px; border:1px solid var(--line); display:block;"
+        >
+      </a>
+    `).join('')}
+  </div>
+  <div class="hint" style="margin-top:4px;">
+    📷 รูปอุปกรณ์ที่เสีย (กดเพื่อดูขนาดเต็ม)
+  </div>
+` : ''}
 
         ${showAdminAssign ? `
         <hr class="divider">
@@ -1409,8 +1456,15 @@ function ticketModal(){
         </div>
         <div class="field" style="margin-top:12px;">
           <label>📷 รูปหลังซ่อมเสร็จ (แนบก่อนกด "แจ้งซ่อมเสร็จเรียบร้อย")</label>
-          <input type="file" accept="image/*" capture="environment" onchange="handleFixedPhotoSelect(event)">
-          ${state.equipmentDraft.fixedPhotoUrl ? `<div class="hint" style="color:var(--teal); margin-top:4px;">✅ แนบรูปแล้ว</div><img src="${state.equipmentDraft.fixedPhotoUrl}" alt="รูปหลังซ่อมเสร็จ" style="max-width:220px; width:100%; border-radius:10px; border:1px solid var(--line); margin-top:6px; display:block;">` : ''}
+         <input type="file" accept="image/*" capture="environment" multiple onchange="handleFixedPhotoSelect(event)">
+          ${((state.equipmentDraft.fixedPhotoUrls || []).length || state.equipmentDraft.fixedPhotoUrl) ? `
+  <div class="hint" style="color:var(--teal); margin-top:4px;">✅ แนบรูปแล้ว</div>
+  <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+    ${(state.equipmentDraft.fixedPhotoUrls || (state.equipmentDraft.fixedPhotoUrl ? [state.equipmentDraft.fixedPhotoUrl] : []))
+      .map((url, index) => `<img src="${url}" alt="รูปหลังซ่อม ${index + 1}" style="width:110px; height:110px; object-fit:cover; border-radius:8px;">`)
+      .join('')}
+  </div>
+` : `<div class="hint" style="margin-top:4px;">ยังไม่ได้แนบรูปหลังซ่อม</div>`}
         </div>
         ` : `
         <div class="kv-grid">
