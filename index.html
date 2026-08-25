@@ -876,6 +876,15 @@ if (photoFiles.length) {
 }
 
 brokenPhotoUrl = brokenPhotoUrls[0] || null;
+  await initLiffIdentity_();
+const params = new URLSearchParams(window.location.search);
+const requireLineIdentity =
+  liff.isInClient() || params.get('source') === 'liff';
+
+if (requireLineIdentity && !CURRENT_LINE_USER_ID) {
+  showToast('ไม่สามารถยืนยันบัญชี LINE ได้ กรุณาเปิดระบบผ่าน LINE แล้วลองใหม่', 'error');
+  return;
+}
   const list = await loadTickets();
   const t = {
     id: genTicketId(list),
