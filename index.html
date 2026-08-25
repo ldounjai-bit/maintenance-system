@@ -394,12 +394,19 @@ async function initLiffIdentity_() {
   try {
     await liff.init({ liffId: LIFF_ID });
 
-    // ถ้าเปิด Web App โดยตรงจาก Browser เดิม
-    // จะไม่บังคับให้ Login เพื่อไม่กระทบระบบเดิม
-    if (!liff.isLoggedIn()) {
-      console.log('เปิดจาก Browser ปกติ - ไม่มี LINE identity');
-      return;
-    }
+   const params = new URLSearchParams(window.location.search);
+const isLiffEntry = params.get('source') === 'liff';
+
+if (!liff.isLoggedIn()) {
+  if (isLiffEntry) {
+    console.log('เปิดผ่าน LIFF แต่ยังไม่ได้ Login - กำลังเข้าสู่ระบบ LINE');
+    liff.login({ redirectUri: window.location.href });
+    return;
+  }
+
+  console.log('เปิดจาก Browser ปกติ - ไม่มี LINE identity');
+  return;
+}
 
     const profile = await liff.getProfile();
 
