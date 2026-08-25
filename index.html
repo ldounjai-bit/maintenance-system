@@ -377,11 +377,48 @@
 
   .footer-note{text-align:center; font-size:11.5px; color:var(--ink-faint); padding:18px 0 4px;}
 </style>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
 <body>
 <div id="app"></div>
 
 <script>
+// ===== LINE LIFF Identity =====
+const LIFF_ID = '2011256301-4VUFRzmP';
+
+let CURRENT_LINE_USER_ID = '';
+let CURRENT_LINE_DISPLAY_NAME = '';
+let CURRENT_LINE_ID_TOKEN = '';
+
+async function initLiffIdentity_() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+
+    // ถ้าเปิด Web App โดยตรงจาก Browser เดิม
+    // จะไม่บังคับให้ Login เพื่อไม่กระทบระบบเดิม
+    if (!liff.isLoggedIn()) {
+      console.log('เปิดจาก Browser ปกติ - ไม่มี LINE identity');
+      return;
+    }
+
+    const profile = await liff.getProfile();
+
+    CURRENT_LINE_USER_ID = profile.userId || '';
+    CURRENT_LINE_DISPLAY_NAME = profile.displayName || '';
+    CURRENT_LINE_ID_TOKEN = liff.getIDToken() || '';
+
+    console.log('LINE identity ready:', {
+      hasUserId: !!CURRENT_LINE_USER_ID,
+      displayName: CURRENT_LINE_DISPLAY_NAME,
+      hasIdToken: !!CURRENT_LINE_ID_TOKEN
+    });
+
+  } catch (err) {
+    console.warn('LIFF init error:', err);
+  }
+}
+
+initLiffIdentity_();S
 /* ============================================================
    CONSTANTS
    ============================================================ */
@@ -838,6 +875,7 @@ brokenPhotoUrl = brokenPhotoUrls[0] || null;
     reporter: state.session.name,
     department: state.session.department,
     room, problem,
+    reporterLineUserId: CURRENT_LINE_USER_ID || '',
     createdAt: new Date().toISOString(),
     status:'pending',
     assignedTechnician:null,
