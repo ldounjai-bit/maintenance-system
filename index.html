@@ -394,20 +394,43 @@ async function initLiffIdentity_() {
   try {
     await liff.init({ liffId: LIFF_ID });
 
-   const params = new URLSearchParams(window.location.search);
-const isLiffEntry = params.get('source') === 'liff';
+    const params = new URLSearchParams(window.location.search);
+    const isLiffEntry = params.get('source') === 'liff';
 
-if (!liff.isLoggedIn()) {
-  if (isLiffEntry) {
-    console.log('เปิดผ่าน LIFF แต่ยังไม่ได้ Login - กำลังเข้าสู่ระบบ LINE');
-    liff.login({ redirectUri: window.location.href });
-    return;
-  }
+    // เปิดอยู่ภายใน LINE / LIFF
+    // ไม่ต้องเรียก liff.login() ซ้ำ
+    if (liff.isInClient()) {
+      const profile = await liff.getProfile();
 
-  console.log('เปิดจาก Browser ปกติ - ไม่มี LINE identity');
-  return;
-}
+      CURRENT_LINE_USER_ID = profile.userId || '';
+      CURRENT_LINE_DISPLAY_NAME = profile.displayName || '';
+      CURRENT_LINE_ID_TOKEN = liff.getIDToken() || '';
 
+      console.log('LINE identity ready in LIFF:', {
+        hasUserId: !!CURRENT_LINE_USER_ID,
+        displayName: CURRENT_LINE_DISPLAY_NAME,
+        hasIdToken: !!CURRENT_LINE_ID_TOKEN
+      });
+
+      return;
+    }
+
+    // เปิดจาก Browser ภายนอกผ่าน Endpoint ของ LIFF
+    if (!liff.isLoggedIn()) {
+      if (isLiffEntry) {
+        console.log('เปิดผ่าน LIFF endpoint แต่ยังไม่ได้ Login');
+        liff.login({
+          redirectUri: window.location.href
+        });
+        return;
+      }
+
+      // Admin/ช่างที่เปิด Web App ตรงจาก Browser
+      console.log('เปิดจาก Browser ปกติ - ไม่มี LINE identity');
+      return;
+    }
+
+    // Browser ภายนอกที่ Login LINE เรียบร้อยแล้ว
     const profile = await liff.getProfile();
 
     CURRENT_LINE_USER_ID = profile.userId || '';
