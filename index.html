@@ -720,6 +720,25 @@ function showToast(msg, type){
 /* ============================================================
    POLLING FOR NOTIFICATIONS (SIMULATED "PUSH")
    ============================================================ */
+  const NOTIFY_SNAPSHOT_KEY = 'maintenance_notify_snapshot_v1';
+
+function loadNotifySnapshot_() {
+  try {
+    const raw = localStorage.getItem(NOTIFY_SNAPSHOT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveNotifySnapshot_(map) {
+  try {
+    localStorage.setItem(
+      NOTIFY_SNAPSHOT_KEY,
+      JSON.stringify(map || {})
+    );
+  } catch (e) {}
+}
 async function pollForUpdates(){
   if(!state.session) return;
   const fresh = await loadTickets();
@@ -753,24 +772,39 @@ async function pollForUpdates(){
   });
 
   const map = {};
-  fresh.forEach(t=>map[t.id]=t.status);
-  const changed = JSON.stringify(fresh) !== JSON.stringify(state.tickets);
-  state.prevStatusSnapshot = map;
-  state.tickets = fresh;
-  if(changed){
-    render();
-  }
+fresh.forEach(t=>map[t.id]=t.status);
+
+const changed =
+  JSON.stringify(fresh) !== JSON.stringify(state.tickets);
+
+state.prevStatusSnapshot = map;
+saveNotifySnapshot_(map);
+
+state.tickets = fresh;
+
+if (changed) {
+  render();
 }
+
 
 /* ============================================================
    INIT
    ============================================================ */
 async function init(){
   state.tickets = await loadTickets();
+
+const savedSnapshot = loadNotifySnapshot_();
+
+if (savedSnapshot) {
+  state.prevStatusSnapshot = savedSnapshot;
+} else {
+  // ครั้งแรกที่ใช้เครื่องนี้ ไม่ต้องเตือนงานเก่าทั้งหมด
   const map = {};
-  state.tickets.forEach(t=>map[t.id]=t.status);
+  state.tickets.forEach(t => map[t.id] = t.status);
+
   state.prevStatusSnapshot = map;
-  state.booting = false;
+  saveNotifySnapshot_(map);
+}
 
   // Deep-link support so a link shared in LINE (or anywhere) can jump
   // straight to the report form, or straight to rating a finished job.
