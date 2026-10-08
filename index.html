@@ -390,6 +390,12 @@
   }
   .rate-banner .rb-title{font-family:var(--font-display); font-weight:600; font-size:16.5px; color:#7A3E00;}
   .rate-banner .rb-sub{font-size:13px; color:#8A5A1E; margin-top:3px;}
+  .line-hint{
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    background:#EEF8F0; border:1px solid #BFE3C8; border-radius:10px;
+    padding:10px 14px; margin-bottom:18px; font-size:13px; color:#25603A;
+  }
+  .line-hint span{flex:1; min-width:200px;}
   @media (prefers-reduced-motion: no-preference){
     .rate-banner .btn{animation:rbPulse 2.2s ease-in-out infinite;}
     @keyframes rbPulse{0%,100%{box-shadow:0 0 0 0 rgba(240,128,31,0.45);} 50%{box-shadow:0 0 0 9px rgba(240,128,31,0);}}
@@ -644,6 +650,7 @@ let state = {
   pushEnabled:false,
   loadFailed:false,
   loadErrorDetail:'',
+  lineChecked:false,
   toasts:[],
   filters:{status:'all', dept:'all', q:''},
   partsDraft:[],          // working parts list while modal open
@@ -1077,6 +1084,8 @@ async function doLogin(e){
     }
   }
 
+  if(state.session.role==='reporter'){ linkLineIdentityForReporter_(state.session.name); }
+
   // เตือนผู้แจ้งทันทีที่ล็อกอิน ถ้ามีงานที่เสร็จแล้วแต่ยังไม่ได้ให้คะแนน (นอกเหนือจากแถบเตือนในหน้าจอ)
   if(state.session.role==='reporter' && !state.ratingModalId){
     const waiting = unratedDoneTickets_(state.session.name);
@@ -1493,6 +1502,21 @@ function unratedDoneTickets_(name){
     .sort((a,b)=>new Date(a.completedAt||a.createdAt)-new Date(b.completedAt||b.createdAt));
 }
 
+// ผูกบัญชี LINE กับชื่อผู้แจ้งอัตโนมัติ (ทำได้เมื่อเปิดผ่าน LINE/LIFF) เพื่อให้ได้รับแจ้งเตือนและปุ่มประเมินใน LINE
+async function linkLineIdentityForReporter_(name){
+  try{
+    if(!CURRENT_LINE_USER_ID) await initLiffIdentity_();
+    if(CURRENT_LINE_USER_ID && GAS_WEBAPP_URL){
+      await fetchWithTimeout(GAS_WEBAPP_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({action:'linkReporterLine', userId: CURRENT_LINE_USER_ID, name: name})
+      });
+    }
+  }catch(e){ console.warn('[linkLineIdentity] skipped:', e); }
+  finally{ state.lineChecked = true; render(); }
+}
+
 function viewReporter(){
   const my = state.tickets.filter(t=>t.reporter===state.session.name).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
   const needsRating = my.filter(t=>t.status==='done' && !t.rating);
@@ -1513,6 +1537,12 @@ function viewReporter(){
         <div class="rb-sub">รบกวนให้คะแนนสักครู่ (ไม่ถึง 10 วินาที) ความเห็นของคุณช่วยให้เราพัฒนาการบริการได้ดีขึ้น</div>
       </div>
       <button class="btn btn-amber" onclick="openRatingModal('${nextToRate.id}')">⭐ ให้คะแนนตอนนี้</button>
+    </div>` : ''}
+
+    ${(state.lineChecked && !CURRENT_LINE_USER_ID) ? `
+    <div class="line-hint">
+      <span>💬 อยากได้แจ้งเตือนความคืบหน้าและปุ่มให้คะแนนผ่าน LINE ไหม? เปิดระบบผ่านแชท LINE ของ "แจ้งซ่อม" แล้วล็อกอินด้วยชื่อเดิม ระบบจะผูกบัญชีให้อัตโนมัติ</span>
+      <a class="btn btn-outline btn-sm" href="https://liff.line.me/${LIFF_ID}" style="text-decoration:none;">เปิดผ่าน LINE</a>
     </div>` : ''}
 
     <div class="panel anim-in stagger-1" style="margin-bottom:24px;">
@@ -1939,7 +1969,7 @@ function header(){
     </div>
     <div class="topbar-right">
       <button class="icon-btn" onclick="toggleSound()" title="${state.soundEnabled?'ปิดเสียงแจ้งเตือน':'เปิดเสียงแจ้งเตือน'}" style="position:relative;">${state.soundEnabled?'🔔':'🔕'}${notificationBadgeCount()>0?`<span class="bell-badge">${notificationBadgeCount()>99?'99+':notificationBadgeCount()}</span>`:''}</button>
-      ${!state.pushEnabled ? `<button class="icon-btn" onclick="registerBrowserPush()" title="เปิดการแจ้งเตือนของเบราว์เซอร์ (ได้รับแจ้งแม้ปิดแท็บนี้)">📲</button>` : ''}
+      ${(!state.pushEnabled && FIREBASE_CONFIG.apiKey) ? `<button class="icon-btn" onclick="registerBrowserPush()" title="เปิดการแจ้งเตือนของเบราว์เซอร์ (ได้รับแจ้งแม้ปิดแท็บนี้)">📲</button>` : ''}
       <div class="user-chip">
         <div class="avatar">${initial}</div>
         <div>
