@@ -696,22 +696,41 @@ async function loadTickets(){
   // ห้ามคืน [] เมื่ออ่านพลาด เพราะโค้ดแบบ "อ่าน → แก้ → บันทึกทับ" จะเอา [] ไปเขียนทับข้อมูลเดิมทั้งหมด
   try{
     if(GAS_WEBAPP_URL){
-      const res = await fetchWithTimeout(`${GAS_WEBAPP_URL}?action=get&key=${encodeURIComponent(TICKETS_KEY)}`);
+      let res;
+      try{
+        res = await fetchWithTimeout(`${GAS_WEBAPP_URL}?action=get&key=${encodeURIComponent(TICKETS_KEY)}`);
+      }catch(netErr){
+        console.error('[loadTickets] network error:', netErr);
+        state.loadErrorDetail = (netErr && netErr.name === 'AbortError')
+          ? 'หมดเวลารอเซิร์ฟเวอร์ (30 วินาที)'
+          : 'ติดต่อ Apps Script ไม่ได้ — ตรวจอินเทอร์เน็ต หรือลิงก์/สิทธิ์ "ทุกคน" ของ Web App ที่ Deploy';
+        return null;
+      }
+      if(!res.ok){
+        state.loadErrorDetail = 'เซิร์ฟเวอร์ตอบ HTTP ' + res.status;
+        return null;
+      }
       const text = await res.text();
       let data;
       try{ data = JSON.parse(text); }
       catch(parseErr){
         console.error('[loadTickets] response was not JSON:', text.slice(0,300));
-        state.loadErrorDetail = 'เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ';
+        state.loadErrorDetail = 'เซิร์ฟเวอร์ตอบกลับไม่ใช่ข้อมูลของระบบ (ขึ้นต้นว่า "' + text.slice(0,40).replace(/\s+/g,' ') + '") — มักเกิดจากการ Deploy หรือการตั้งสิทธิ์ Apps Script';
         return null;
       }
       if(!data || data.error){
         console.error('[loadTickets] server error:', data && data.error);
-        state.loadErrorDetail = 'เซิร์ฟเวอร์รายงานข้อผิดพลาด';
+        state.loadErrorDetail = 'Apps Script รายงานข้อผิดพลาด: ' + String(data && data.error).slice(0,100);
         return null;
       }
       if(data.value === null || data.value === undefined || data.value === '') return [];
-      const parsed = JSON.parse(data.value);
+      let parsed;
+      try{ parsed = JSON.parse(data.value); }
+      catch(valErr){
+        console.error('[loadTickets] stored value is not valid JSON:', String(data.value).slice(0,200));
+        state.loadErrorDetail = 'ข้อมูลงานในชีตเสียรูปแบบ อ่านเป็น JSON ไม่ได้ (ความยาว ' + String(data.value).length + ' ตัวอักษร)';
+        return null;
+      }
       if(!Array.isArray(parsed)){
         state.loadErrorDetail = 'รูปแบบข้อมูลงานไม่ถูกต้อง';
         return null;
@@ -749,7 +768,7 @@ function showLoadErrorBanner(show){
   el = document.createElement('div');
   el.id = 'load-error-banner';
   el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:300;background:#B23A2E;color:#fff;padding:12px 16px;font-size:14px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;box-shadow:0 -2px 10px rgba(0,0,0,.25);';
-  el.innerHTML = '<span>⚠️ โหลดรายการงานไม่สำเร็จ'+(state.loadErrorDetail?' ('+state.loadErrorDetail+')':'')+' — ข้อมูลเดิมยังปลอดภัย ระบบจะไม่บันทึกทับจนกว่าจะโหลดสำเร็จ</span><button onclick="retryLoadNow()" style="background:#fff;color:#B23A2E;border:none;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;">ลองใหม่</button>';
+  el.innerHTML = '<span>⚠️ โหลดรายการงานไม่สำเร็จ'+(state.loadErrorDetail?' ('+escapeHtml(state.loadErrorDetail)+')':'')+' — ข้อมูลเดิมยังปลอดภัย ระบบจะไม่บันทึกทับจนกว่าจะโหลดสำเร็จ</span><button onclick="retryLoadNow()" style="background:#fff;color:#B23A2E;border:none;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;">ลองใหม่</button>';
   document.body.appendChild(el);
 }
 async function retryLoadNow(){
